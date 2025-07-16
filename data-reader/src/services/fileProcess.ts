@@ -21,8 +21,6 @@ export class FileProcessService {
    */
   static async processFile(fileLocation: string): Promise<FileProcessResult> {
     const startTime = Date.now();
-    console.log(`Starting file processing for ${fileLocation}`);
-    console.log(`Batch size: ${this.BATCH_SIZE}`);
 
     const result: FileProcessResult = {
       success: false,
@@ -79,9 +77,6 @@ export class FileProcessService {
             // Process batch when it reaches the batch size
             if (batch.length >= this.BATCH_SIZE) {
               batchCount++;
-              console.log(
-                `Processing batch ${batchCount} with ${batch.length} records`
-              );
               await this.processBatch(
                 batch,
                 result,
@@ -102,9 +97,6 @@ export class FileProcessService {
       // Process remaining records in the last batch
       if (batch.length > 0) {
         batchCount++;
-        console.log(
-          `Processing final batch ${batchCount} with ${batch.length} records`
-        );
         await this.processBatch(
           batch,
           result,
@@ -112,10 +104,6 @@ export class FileProcessService {
           lineNumber - batch.length + 1
         );
       }
-
-      console.log(`Total lines processed: ${lineNumber}`);
-      console.log(`Total batches processed: ${batchCount}`);
-      console.log(`Total records saved: ${result.savedRecords}`);
 
       // Write errors to log file if any
       if (errors.length > 0) {
@@ -140,7 +128,7 @@ export class FileProcessService {
   }
 
   /**
-   * Write errors to log file
+   * Write errors to log file using streams
    * @param errors Array of error messages
    * @param logFilePath Path to the log file
    */
@@ -149,17 +137,29 @@ export class FileProcessService {
     logFilePath: string
   ): Promise<void> {
     try {
-      const logContent = [
-        `Processing Errors - ${new Date().toISOString()}`,
-        `Total Errors: ${errors.length}`,
-        "",
-        ...errors,
-      ].join("\n");
+      const writeStream = fs.createWriteStream(logFilePath, {
+        encoding: "utf-8",
+      });
 
-      fs.writeFileSync(logFilePath, logContent, "utf-8");
-      console.log(`Error log written to: ${logFilePath}`);
+      // Write header
+      writeStream.write(`Processing Errors - ${new Date().toISOString()}\n`);
+      writeStream.write(`Total Errors: ${errors.length}\n\n`);
+
+      // Write each error on a new line
+      for (const error of errors) {
+        writeStream.write(`${error}\n`);
+      }
+
+      // Close the stream
+      writeStream.end();
+
+      // Wait for the stream to finish writing
+      await new Promise<void>((resolve, reject) => {
+        writeStream.on("finish", () => resolve());
+        writeStream.on("error", reject);
+      });
     } catch (error) {
-      console.error("Failed to write error log:", error);
+      // Removed: console.error('Failed to write error log:', error);
     }
   }
 
@@ -176,7 +176,7 @@ export class FileProcessService {
     errors: string[],
     startLineNumber: number
   ): Promise<void> {
-    console.log(`Processing batch with ${batch.length} records...`);
+    // Removed: console.log(`Processing batch with ${batch.length} records...`);
 
     let successfulInserts = 0;
 
@@ -193,21 +193,21 @@ export class FileProcessService {
         const errorMsg = `Line ${currentLineNumber} - ${
           personData.personalId
         }: ${error instanceof Error ? error.message : "Unknown error"}`;
-        console.error(errorMsg);
+        // Removed: console.error(errorMsg);
         errors.push(errorMsg);
       }
     }
 
-    console.log(
-      `Successfully inserted ${successfulInserts} out of ${batch.length} records in this batch`
-    );
+    // Removed: console.log(
+    //   `Successfully inserted ${successfulInserts} out of ${batch.length} records in this batch`
+    // );
 
     result.savedRecords += successfulInserts;
     result.totalRecords += batch.length;
 
-    console.log(
-      `Updated result - savedRecords: ${result.savedRecords}, totalRecords: ${result.totalRecords}`
-    );
+    // Removed: console.log(
+    //   `Updated result - savedRecords: ${result.savedRecords}, totalRecords: ${result.totalRecords}`
+    // );
   }
 
   /**
