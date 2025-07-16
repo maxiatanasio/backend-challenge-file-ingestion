@@ -22,12 +22,12 @@ const PersonSchema: Schema = new Schema<IPerson>({
   name: {
     type: String,
     required: true,
-    maxlength: 256,
+    maxlength: 50,
   },
   surname: {
     type: String,
     required: true,
-    maxlength: 256,
+    maxlength: 50,
   },
   personalId: {
     type: String,

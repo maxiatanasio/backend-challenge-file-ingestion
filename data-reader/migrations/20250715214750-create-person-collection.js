@@ -16,8 +16,8 @@ module.exports = {
           ],
           properties: {
             uuid: { bsonType: "string" },
-            name: { bsonType: "string", maxLength: 256 },
-            surname: { bsonType: "string", maxLength: 256 },
+            name: { bsonType: "string", maxLength: 50 },
+            surname: { bsonType: "string", maxLength: 50 },
             personalId: { bsonType: "string", maxLength: 10 },
             status: { enum: ["Activo", "Inactivo"] },
             dateOfEntry: { bsonType: "date" },
