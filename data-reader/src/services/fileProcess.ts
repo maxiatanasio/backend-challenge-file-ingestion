@@ -87,7 +87,11 @@ export class FileProcessService {
             }
           }
         } catch (error) {
-          const errorMsg = `Line ${lineNumber} - N/A: ${
+          // Extract personalId from raw line for error reporting
+          const fields = line.split("|").map((field) => field.trim());
+          const personalId = fields.length >= 3 ? fields[2] : "N/A";
+
+          const errorMsg = `Line ${lineNumber} - ${personalId}: ${
             error instanceof Error ? error.message : "Unknown error"
           }`;
           errors.push(errorMsg);
