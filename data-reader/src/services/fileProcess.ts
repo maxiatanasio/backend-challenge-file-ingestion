@@ -1,6 +1,7 @@
 import fs from "fs";
 import readline from "readline";
 import path from "path";
+import os from "os";
 import Person, { IPerson } from "../models/Person";
 
 export interface FileProcessResult {
@@ -9,6 +10,16 @@ export interface FileProcessResult {
   savedRecords: number;
   errorLogPath?: string;
   processingTime: number;
+  cpuUsage: {
+    start: number;
+    end: number;
+    average: number;
+  };
+  memoryUsage: {
+    start: number;
+    end: number;
+    peak: number;
+  };
 }
 
 export class FileProcessService {
@@ -21,12 +32,16 @@ export class FileProcessService {
    */
   static async processFile(fileLocation: string): Promise<FileProcessResult> {
     const startTime = Date.now();
+    const startCpuUsage = process.cpuUsage();
+    const startMemoryUsage = process.memoryUsage();
 
     const result: FileProcessResult = {
       success: false,
       totalRecords: 0,
       savedRecords: 0,
       processingTime: 0,
+      cpuUsage: { start: 0, end: 0, average: 0 },
+      memoryUsage: { start: 0, end: 0, peak: 0 },
     };
 
     // Create error log file
@@ -35,13 +50,15 @@ export class FileProcessService {
     const logFilePath = path.join(process.cwd(), "logs", logFileName);
 
     const errors: string[] = [];
+    const cpuSamples: number[] = [];
+    const memorySamples: number[] = [];
 
     try {
       // Validate file exists and is readable
       if (!fs.existsSync(fileLocation)) {
         const errorMsg = `File not found: ${fileLocation}`;
         errors.push(errorMsg);
-        await this.writeErrorsToLog(errors, logFilePath);
+        await this.writeErrorsToLog(errors, logFilePath, result);
         result.errorLogPath = logFilePath;
         return result;
       }
@@ -62,6 +79,15 @@ export class FileProcessService {
       // Process file line by line using streams
       for await (const line of rl) {
         lineNumber++;
+
+        // Collect metrics every 1000 lines
+        if (lineNumber % 1000 === 0) {
+          const currentCpuUsage = process.cpuUsage();
+          const currentMemoryUsage = process.memoryUsage();
+
+          cpuSamples.push(currentCpuUsage.user + currentCpuUsage.system);
+          memorySamples.push(currentMemoryUsage.heapUsed);
+        }
 
         // Skip empty lines
         if (!line.trim()) {
@@ -109,14 +135,45 @@ export class FileProcessService {
         );
       }
 
+      // Calculate final metrics
+      const endTime = Date.now();
+      const endCpuUsage = process.cpuUsage();
+      const endMemoryUsage = process.memoryUsage();
+
+      // Calculate CPU usage
+      const startCpuTotal = startCpuUsage.user + startCpuUsage.system;
+      const endCpuTotal = endCpuUsage.user + endCpuUsage.system;
+      const cpuDiff = endCpuTotal - startCpuTotal;
+      const timeDiff = endTime - startTime;
+
+      result.cpuUsage = {
+        start: startCpuTotal,
+        end: endCpuTotal,
+        average:
+          cpuSamples.length > 0
+            ? cpuSamples.reduce((a, b) => a + b, 0) / cpuSamples.length
+            : 0,
+      };
+
+      // Calculate memory usage
+      result.memoryUsage = {
+        start: startMemoryUsage.heapUsed,
+        end: endMemoryUsage.heapUsed,
+        peak:
+          memorySamples.length > 0
+            ? Math.max(...memorySamples)
+            : endMemoryUsage.heapUsed,
+      };
+
+      result.processingTime = timeDiff;
+
       // Write errors to log file if any
       if (errors.length > 0) {
-        await this.writeErrorsToLog(errors, logFilePath);
+        await this.writeErrorsToLog(errors, logFilePath, result);
         result.errorLogPath = logFilePath;
       }
 
       result.success = result.savedRecords > 0;
-      result.processingTime = Date.now() - startTime;
 
       return result;
     } catch (error) {
@@ -124,7 +181,7 @@ export class FileProcessService {
         error instanceof Error ? error.message : "Unknown error"
       }`;
       errors.push(errorMsg);
-      await this.writeErrorsToLog(errors, logFilePath);
+      await this.writeErrorsToLog(errors, logFilePath, result);
       result.errorLogPath = logFilePath;
       result.processingTime = Date.now() - startTime;
       return result;
@@ -135,19 +192,38 @@ export class FileProcessService {
    * Write errors to log file using streams
    * @param errors Array of error messages
    * @param logFilePath Path to the log file
+   * @param result FileProcessResult with metrics
    */
   private static async writeErrorsToLog(
     errors: string[],
-    logFilePath: string
+    logFilePath: string,
+    result: FileProcessResult
   ): Promise<void> {
     try {
       const writeStream = fs.createWriteStream(logFilePath, {
         encoding: "utf-8",
       });
 
-      // Write header
+      // Write header with metrics
       writeStream.write(`Processing Errors - ${new Date().toISOString()}\n`);
-      writeStream.write(`Total Errors: ${errors.length}\n\n`);
+      writeStream.write(`Total Errors: ${errors.length}\n`);
+      writeStream.write(`Total Records: ${result.totalRecords}\n`);
+      writeStream.write(`Saved Records: ${result.savedRecords}\n`);
+      writeStream.write(`Processing Time: ${result.processingTime}ms\n`);
+      writeStream.write(
+        `CPU Usage - Start: ${result.cpuUsage.start}μs, End: ${
+          result.cpuUsage.end
+        }μs, Average: ${result.cpuUsage.average.toFixed(2)}μs\n`
+      );
+      writeStream.write(
+        `Memory Usage - Start: ${(
+          result.memoryUsage.start /
+          1024 /
+          1024
+        ).toFixed(2)}MB, End: ${(result.memoryUsage.end / 1024 / 1024).toFixed(
+          2
+        )}MB, Peak: ${(result.memoryUsage.peak / 1024 / 1024).toFixed(2)}MB\n\n`
+      );
 
       // Write each error on a new line
       for (const error of errors) {

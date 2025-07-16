@@ -28,6 +28,16 @@ export const processFile = async (req: Request, res: Response) => {
       totalRecords: result.totalRecords,
       savedRecords: result.savedRecords,
       processingTime: result.processingTime,
+      cpuUsage: {
+        start: result.cpuUsage.start,
+        end: result.cpuUsage.end,
+        average: result.cpuUsage.average,
+      },
+      memoryUsage: {
+        start: (result.memoryUsage.start / 1024 / 1024).toFixed(2) + "MB",
+        end: (result.memoryUsage.end / 1024 / 1024).toFixed(2) + "MB",
+        peak: (result.memoryUsage.peak / 1024 / 1024).toFixed(2) + "MB",
+      },
       errorLogPath: result.errorLogPath, // Will be undefined if no errors
     });
   } catch (error) {
